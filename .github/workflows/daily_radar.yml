@@ -2,7 +2,9 @@ name: Daily AI Event Radar
 
 on:
   schedule:
-    # Runs at 15:00 UTC, which is 8 AM PDT (Pacific Daylight Time) / 7 AM PST (Pacific Standard Time)
+    # Runs at 15:00 UTC. 
+    # During Daylight Saving Time (DST), this equals 8:00 AM Pacific Time.
+    # During Standard Time, this equals 7:00 AM Pacific Time.
     - cron: '0 15 * * *'
   workflow_dispatch: # Allows manual triggering from the GitHub Actions UI
 
@@ -19,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10' # Adjust if a different version is needed
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
@@ -28,9 +30,10 @@ jobs:
 
       - name: Run Event Radar
         env:
-          # Use GitHub Secrets for API keys to avoid hardcoding
-          # Update the secret names based on what the script actually uses
-          API_KEY: ${{ secrets.API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          MEETUP_API_KEY: ${{ secrets.MEETUP_API_KEY }}
+          EVENTBRITE_API_KEY: ${{ secrets.EVENTBRITE_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: |
           python main.py --days 30 --min-score 3
 

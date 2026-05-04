@@ -1,0 +1,17 @@
+[
+  {
+    "title": "Seattle AI Agents Hackathon",
+    "date": "2026-06-01",
+    "location": "Seattle, WA",
+    "organizer": "Luma Seattle",
+    "url": "https://lu.ma/xyz",
+    "description": "Hands-on building AI agents.",
+    "sources": [
+      "luma"
+    ],
+    "relevance_score": 10,
+    "category": "Uncategorized",
+    "recommendation": "Best Matches",
+    "why_it_matters": "Scored via basic keyword fallback."
+  }
+]
