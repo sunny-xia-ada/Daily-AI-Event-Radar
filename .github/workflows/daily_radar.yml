@@ -1,0 +1,59 @@
+name: Daily AI Event Radar
+
+on:
+  schedule:
+    # Runs at 15:00 UTC, which is 8 AM PDT (Pacific Daylight Time) / 7 AM PST (Pacific Standard Time)
+    - cron: '0 15 * * *'
+  workflow_dispatch: # Allows manual triggering from the GitHub Actions UI
+
+jobs:
+  run-radar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to commit the updated outputs back to the repository
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10' # Adjust if a different version is needed
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Event Radar
+        env:
+          # Use GitHub Secrets for API keys to avoid hardcoding
+          # Update the secret names based on what the script actually uses
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          python main.py --days 30 --min-score 3
+
+      - name: Upload outputs as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: radar-outputs
+          path: |
+            outputs/events.csv
+            outputs/events.json
+            outputs/report.md
+          retention-days: 14
+
+      - name: Commit and push updated outputs
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Add the output files
+          git add outputs/events.csv outputs/events.json outputs/report.md || true
+          
+          # Commit only if there are changes
+          git diff --staged --quiet || git commit -m "chore: update daily event radar outputs"
+          
+          # Push the changes
+          git push
