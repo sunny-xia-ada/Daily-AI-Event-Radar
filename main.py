@@ -4,9 +4,11 @@ import json
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import requests
+from bs4 import BeautifulSoup
+from dateutil import parser as date_parser
 from dotenv import load_dotenv
 
 # Optional OpenAI integration for scoring
@@ -24,8 +26,8 @@ logger = logging.getLogger(__name__)
 class Event:
     def __init__(self, title, date, location, organizer, url, description, source):
         self.title = title
-        self.date = date
-        self.location = location
+        self.date = date or "Unknown"
+        self.location = location or "Unknown"
         self.organizer = organizer
         self.url = url
         self.description = description
@@ -34,6 +36,7 @@ class Event:
         self.category = "Uncategorized"
         self.recommendation = "Low Priority"
         self.why_it_matters = ""
+        self.source_confidence = "low"
 
     def normalize_string(self, text: str) -> str:
         if not text:
@@ -81,7 +84,8 @@ class Event:
             "relevance_score": self.relevance_score,
             "category": self.category,
             "recommendation": self.recommendation,
-            "why_it_matters": self.why_it_matters
+            "why_it_matters": self.why_it_matters,
+            "source_confidence": self.source_confidence
         }
 
 
@@ -169,37 +173,128 @@ def score_event_fallback(event: Event):
     event.why_it_matters = "Scored via basic keyword fallback."
 
 
-def fetch_from_luma() -> List[Event]:
-    # Placeholder for actual Luma API fetch
-    return [
-        Event("Seattle AI Agents Hackathon", "2026-06-01", "Seattle, WA", "Luma Seattle", "https://lu.ma/xyz", "Hands-on building AI agents.", "luma"),
-        Event("Generic Business AI Mixer", "2026-06-05", "Online", "Business Inc", "https://lu.ma/abc", "Marketing AI products.", "luma")
-    ]
+def fetch_from_luma(days: int) -> List[Event]:
+    return []
 
-def fetch_from_meetup() -> List[Event]:
+def fetch_from_meetup(days: int) -> List[Event]:
     key = os.getenv("MEETUP_API_KEY")
     if not key:
         raise ValueError("MEETUP_API_KEY missing")
-    # Mocking Meetup data
-    return [
-        Event("Seattle LLM Builders Meetup", "2026-06-02", "Seattle", "Meetup Group", "https://meetup.com/xyz", "Technical meetup on LLMs.", "meetup")
-    ]
+    return []
 
-def fetch_from_eventbrite() -> List[Event]:
+def fetch_from_eventbrite(days: int) -> List[Event]:
     key = os.getenv("EVENTBRITE_API_KEY")
     if not key:
         raise ValueError("EVENTBRITE_API_KEY missing")
-    return [
-         Event("ChatGPT for Beginners", "2026-06-10", "Online", "EB Host", "https://eventbrite.com/xyz", "Learn to use ChatGPT.", "eventbrite")
-    ]
+    return []
 
-def fetch_from_tavily() -> List[Event]:
+def fetch_from_tavily(days: int) -> List[Event]:
     key = os.getenv("TAVILY_API_KEY")
     if not key:
         raise ValueError("TAVILY_API_KEY missing")
-    return [
-         Event("Open Source AI Workshop", "2026-06-15", "Bellevue, WA", "Tech Org", "https://example.com", "Deep dive into OS models.", "web_search")
+    
+    queries = [
+        "Seattle AI agents event",
+        "Seattle LLM meetup",
+        "Seattle AI builders event",
+        "Bellevue AI agents meetup",
+        "Redmond AI hackathon",
+        "Microsoft Reactor Redmond AI event",
+        "AI Tinkerers Seattle",
+        "Seattle open source AI event",
+        "Seattle GenAI meetup",
+        "Databricks Bellevue AI event",
+        "GitHub AI event Seattle"
     ]
+    
+    headers = {"Content-Type": "application/json"}
+    events = []
+    
+    now = datetime.now()
+    max_date = now + timedelta(days=days)
+    
+    for query in queries:
+        try:
+            payload = {
+                "api_key": key,
+                "query": query,
+                "search_depth": "basic",
+                "include_images": False,
+                "include_answer": False,
+                "max_results": 5
+            }
+            resp = requests.post("https://api.tavily.com/search", json=payload, headers=headers, timeout=10)
+            resp.raise_for_status()
+            results = resp.json().get("results", [])
+            
+            for res in results:
+                url = res.get("url")
+                if not url: continue
+                
+                page_title = res.get("title", "")
+                page_desc = res.get("content", "")
+                
+                try:
+                    page_resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+                    if page_resp.status_code == 200:
+                        soup = BeautifulSoup(page_resp.text, 'html.parser')
+                        if soup.title:
+                            page_title = soup.title.string or page_title
+                        
+                        meta_desc = soup.find("meta", attrs={"name": "description"})
+                        if meta_desc:
+                            page_desc = meta_desc.get("content", page_desc)
+                            
+                        og_desc = soup.find("meta", property="og:description")
+                        if og_desc:
+                            page_desc = og_desc.get("content", page_desc)
+                except Exception:
+                    pass
+                
+                parsed_date = None
+                date_str = "Unknown"
+                try:
+                    # Fuzzy date parsing from description or title
+                    parsed_date = date_parser.parse(page_desc + " " + page_title, fuzzy=True)
+                    if parsed_date:
+                        date_str = parsed_date.strftime("%Y-%m-%d")
+                except Exception:
+                    pass
+                    
+                if parsed_date:
+                    if parsed_date < now - timedelta(days=1) or parsed_date > max_date:
+                        continue
+                
+                loc_str = "Unknown"
+                text_to_check = (page_desc + " " + page_title).lower()
+                if "seattle" in text_to_check: loc_str = "Seattle, WA"
+                elif "bellevue" in text_to_check: loc_str = "Bellevue, WA"
+                elif "redmond" in text_to_check: loc_str = "Redmond, WA"
+                elif "online" in text_to_check or "virtual" in text_to_check: loc_str = "Online"
+                
+                e = Event(
+                    title=page_title,
+                    date=date_str,
+                    location=loc_str,
+                    organizer="Unknown",
+                    url=url,
+                    description=page_desc,
+                    source="tavily"
+                )
+                
+                if date_str != "Unknown" and loc_str != "Unknown":
+                    e.source_confidence = "high"
+                elif date_str != "Unknown" or loc_str != "Unknown":
+                    e.source_confidence = "medium"
+                else:
+                    e.source_confidence = "low"
+                    
+                events.append(e)
+                
+        except Exception as e:
+            logger.error(f"Tavily query failed: {query} - {e}")
+            
+    return events
 
 
 def deduplicate_events(events: List[Event]) -> List[Event]:
@@ -251,11 +346,12 @@ def generate_markdown_report(events: List[Event], run_notes: Dict[str, Any], fil
                     f.write(f"* Source: {', '.join(ev.sources)}\n")
                     f.write(f"* Relevance: {ev.relevance_score}/10\n")
                     f.write(f"* Category: {ev.category}\n")
+                    f.write(f"* Confidence: {ev.source_confidence}\n")
                     f.write(f"* Recommendation: {ev.recommendation}\n")
                     f.write(f"* Why it matters: {ev.why_it_matters}\n")
                     f.write(f"* Link: {ev.url}\n\n")
                 else:
-                    f.write(f"* Date: {ev.date} | Location: {ev.location} | Link: {ev.url}\n\n")
+                    f.write(f"* Date: {ev.date} | Location: {ev.location} | Confidence: {ev.source_confidence} | Link: {ev.url}\n\n")
         
         write_event_section("Best Matches", best_matches)
         write_event_section("Maybe Worth Checking", maybe)
@@ -281,7 +377,7 @@ def main():
     for name, fetch_func in sources.items():
         if fetch_func:
             try:
-                evs = fetch_func()
+                evs = fetch_func(args.days)
                 all_events.extend(evs)
                 run_notes["success_sources"].append(name)
             except ValueError as e:

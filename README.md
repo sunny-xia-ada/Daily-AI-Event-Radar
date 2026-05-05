@@ -8,6 +8,12 @@
 
 This repository contains scripts and a GitHub Actions workflow to run a daily scan for AI events, save the results, and generate reports.
 
+### Data Sources (V1)
+- **Tavily Web Search**: This is the primary real search source for V1. It scans the web for relevant AI events in the Seattle area and scrapes event pages to extract dates and locations.
+- **Luma**: Luma does not have a public API, so Luma support is currently handled via the Tavily web search and event page parsing.
+- **Meetup / Eventbrite**: These are stubbed out as future integrations unless you implement the actual API clients for them.
+- *Note: The tool never returns fake/mock events during normal runtime. If an API key is missing, that source is skipped.*
+
 ### GitHub Actions Setup
 
 A GitHub Actions workflow is included to automate the process of running the radar.
@@ -69,6 +75,12 @@ pytest
 <h2 id="中文">中文</h2>
 
 本项目包含相关脚本与 GitHub Actions 工作流，用于每日自动扫描 AI 事件，保存结果并生成报告。
+
+### 数据源 (V1)
+- **Tavily 网页搜索**: 这是 V1 版本中主要的真实搜索源。它在网络上扫描西雅图地区的相关 AI 事件，并抓取事件页面以提取日期和位置信息。
+- **Luma**: Luma 没有公开的 API，因此目前通过 Tavily 网页搜索和事件页面解析来支持 Luma。
+- **Meetup / Eventbrite**: 除非您实际实施了针对它们的 API 客户端，否则这些暂时作为未来集成的存根保留。
+- *注意：该工具在正常运行时绝不会返回虚假或模拟事件。如果缺少 API 密钥，则会跳过该数据源。*
 
 ### GitHub Actions 设置
 
